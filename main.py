@@ -21,10 +21,9 @@ async def lifespan(app: FastAPI):
     """
     global classifier
     classifier = pipeline(
-        "sentiment-analysis",
-        model="imdb_distilbert_model",
-        tokenizer="imdb_distilbert_model"
-    )
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english"
+)
     yield
 
 
