@@ -1,5 +1,3 @@
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from transformers import pipeline
@@ -7,31 +5,31 @@ from transformers import pipeline
 # Global variable for the loaded classifier
 classifier = None
 
-# Label mapping for the fine-tuned model output
+# Label mapping for the model output
 label_map = {
     "LABEL_0": "Negative",
     "LABEL_1": "Positive"
 }
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def get_classifier():
     """
-    Load the BERT sentiment classifier once when the API starts.
+    Lazily load the sentiment model on the first request.
+    This helps Cloud Run start the container faster.
     """
     global classifier
-    classifier = pipeline(
-    "sentiment-analysis",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
-)
-    yield
+    if classifier is None:
+        classifier = pipeline(
+            "sentiment-analysis",
+            model="distilbert-base-uncased-finetuned-sst-2-english"
+        )
+    return classifier
 
 
 app = FastAPI(
     title="DistilBERT Sentiment Service",
-    description="FastAPI backend for sentiment analysis using a fine-tuned DistilBERT model.",
-    version="1.0.0",
-    lifespan=lifespan
+    description="FastAPI backend for sentiment analysis using a Hugging Face DistilBERT model.",
+    version="1.0.1"
 )
 
 
@@ -58,12 +56,21 @@ def read_root():
     }
 
 
+@app.get("/health")
+def health_check():
+    """
+    Health check endpoint for Cloud Run.
+    """
+    return {"status": "ok"}
+
+
 @app.post("/predict", response_model=PredictionResponse)
 def predict_sentiment(payload: ReviewRequest):
     """
-    Predict sentiment for a single review using the fine-tuned DistilBERT model.
+    Predict sentiment for a single review.
     """
-    result = classifier(payload.review)[0]
+    model = get_classifier()
+    result = model(payload.review)[0]
 
     raw_label = result["label"]
     mapped_label = label_map.get(raw_label, raw_label)
